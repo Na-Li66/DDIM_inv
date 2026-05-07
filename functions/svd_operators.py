@@ -1,11 +1,5 @@
 import torch
-# import cv2
-import numpy as np
-import torch.nn as nn
-import torch.nn.functional as F
-import math
 
-    
 class A_functions:
     """
     A class replacing the SVD of a matrix A, perhaps efficiently.
@@ -234,22 +228,16 @@ class WalshHadamardCS(A_functions):
         temp[:, :, self.perm] = vec.clone().reshape(vec.shape[0], -1, self.channels).permute(0, 2, 1)
         return self.fwht(temp).reshape(vec.shape[0], -1)
     
-    def V_ours(self, vec):
+    def V_DDIM_inv(self, vec):
         temp = torch.zeros(vec.shape[0], self.channels, self.img_dim**2, device=vec.device)
         temp[:, :, self.perm] = vec.clone().reshape(vec.shape[0], -1, self.channels).permute(0, 2, 1)
         return self.fwht(temp).reshape(vec.shape[0], -1)
-        # vec = torch.cat((vec,torch.zeros((vec.shape[0],self.channels*self.img_dim**2-vec.shape[1]),device=vec.device)),dim=1)
-        # temp = torch.zeros(vec.shape[0], self.channels, self.img_dim**2, device=vec.device)
-        # temp[:, :, self.perm] = vec.clone().reshape(vec.shape[0], -1, self.channels).permute(0, 2, 1)
-        # return self.fwht(temp).reshape(vec.shape[0], -1)
     
     def Vt(self, vec):
         return self.fwht(vec.clone())[:, :, self.perm].permute(0, 2, 1).reshape(vec.shape[0], -1)
     
-    def Vt_ours(self, vec):
+    def Vt_DDIM_inv(self, vec):
         return self.fwht(vec.clone())[:, :, self.perm].permute(0, 2, 1).reshape(vec.shape[0], -1)
-        # temp = self.fwht(vec.clone())[:, :, self.perm].permute(0, 2, 1).reshape(vec.shape[0], -1)
-        # return temp[:, :self._singulars.shape[0]]
 
     def U(self, vec):
         return vec.clone().reshape(vec.shape[0], -1)
@@ -260,7 +248,7 @@ class WalshHadamardCS(A_functions):
     def singulars(self):
         return self._singulars
 
-    def singulars_ours(self):
+    def singulars_DDIM_inv(self):
         return torch.cat((self._singulars,torch.zeros(self.channels*self.img_dim**2-self._singulars.shape[0],device=self._singulars.device)),dim=0)
 
     def add_zeros(self, vec):
@@ -354,7 +342,7 @@ class Inpainting(A_functions):
         out[:, self.missing_indices] = temp[:, self.kept_indices.shape[0]:]
         return out.reshape(vec.shape[0], -1, self.channels).permute(0, 2, 1).reshape(vec.shape[0], -1)
 
-    def V_ours(self, vec):
+    def V_DDIM_inv(self, vec):
         temp = vec.clone().reshape(vec.shape[0], -1)
         out = torch.zeros((vec.shape[0],self.channels*self.img_dim**2),device=temp.device,dtype=temp.dtype)
         out[:, self.kept_indices] = temp
@@ -368,12 +356,10 @@ class Inpainting(A_functions):
         out[:, self.kept_indices.shape[0]:] = temp[:, self.missing_indices]
         return out
 
-    def Vt_ours(self, vec):
+    def Vt_DDIM_inv(self, vec):
         temp = vec.clone().reshape(vec.shape[0], self.channels, -1).permute(0, 2, 1).reshape(vec.shape[0], -1)
         out = torch.zeros((vec.shape[0],self.kept_indices.shape[0]),device=temp.device,dtype=temp.dtype)
         out = temp[:, self.kept_indices]
-        # out[:, :self.kept_indices.shape[0]] = temp[:, self.kept_indices]
-        # out[:, self.kept_indices.shape[0]:] = temp[:, self.missing_indices]
         return out
     
     def U(self, vec):
@@ -384,7 +370,7 @@ class Inpainting(A_functions):
 
     def singulars(self):
         return self._singulars
-    def singulars_ours(self):
+    def singulars_DDIM_inv(self):
         return self._singulars
 
     def add_zeros(self, vec):
@@ -537,7 +523,7 @@ class SuperResolution(A_functions):
         recon = recon.reshape(vec.shape[0], self.channels * self.img_dim ** 2)
         return recon
 
-    def V_ours(self, vec):
+    def V_DDIM_inv(self, vec):
         temp = vec.clone().reshape(vec.shape[0], -1)
         patches = torch.zeros(vec.shape[0], self.channels, self.y_dim**2, self.ratio**2, device=vec.device)
         patches[:, :, :, 0] = temp[:, :self.channels * self.y_dim**2].view(vec.shape[0], self.channels, -1)
@@ -549,33 +535,9 @@ class SuperResolution(A_functions):
         patches_orig = patches.reshape(vec.shape[0], self.channels, self.y_dim, self.y_dim, self.ratio, self.ratio)
         recon = patches_orig.permute(0, 1, 2, 4, 3, 5).contiguous()
         recon = recon.reshape(vec.shape[0], self.channels * self.img_dim ** 2)
-        # #reorder the vector back into patches (because singulars are ordered descendingly)
-        # temp = vec.clone().reshape(vec.shape[0], -1)
-        # patches = torch.zeros(vec.shape[0], self.channels, self.y_dim**2, 1, device=vec.device)
-        # patches[:, :, :, 0] = temp[:, :self.channels * self.y_dim**2].view(vec.shape[0], self.channels, -1)
-        # # for idx in range(self.ratio**2-1):
-        # #     patches[:, :, :, idx+1] = temp[:, (self.channels*self.y_dim**2+idx)::self.ratio**2-1].view(vec.shape[0], self.channels, -1)
-        # #multiply each patch by the small V
-        # patches = torch.matmul(self.V_small[:,0].unsqueeze(1), patches.reshape(-1, 1, 1)).reshape(vec.shape[0], self.channels, -1, self.ratio**2)
-        # #repatch the patches into an image
-        # patches_orig = patches.reshape(vec.shape[0], self.channels, self.y_dim, self.y_dim, self.ratio, self.ratio)
-        # recon = patches_orig.permute(0, 1, 2, 4, 3, 5).contiguous()
-        # recon = recon.reshape(vec.shape[0], self.channels * self.img_dim ** 2)
         return recon
 
-    def Vt_ours(self, vec):
-        # #extract flattened patches
-        # patches = vec.clone().reshape(vec.shape[0], self.channels, self.img_dim, self.img_dim)
-        # patches = patches.unfold(2, self.ratio, self.ratio).unfold(3, self.ratio, self.ratio)
-        # unfold_shape = patches.shape
-        # patches = patches.contiguous().reshape(vec.shape[0], self.channels, -1, self.ratio**2)
-        # #multiply each by the small V transposed
-        # patches = torch.matmul(self.Vt_small[0,:], patches.reshape(-1, self.ratio**2, 1)).reshape(vec.shape[0], self.channels, -1, 1)
-        # #reorder the vector to have the first entry first (because singulars are ordered descendingly)
-        # recon = torch.zeros(vec.shape[0], self.channels * self.y_dim**2, device=vec.device)
-        # recon[:, :self.channels * self.y_dim**2] = patches[:, :, :, 0].view(vec.shape[0], self.channels * self.y_dim**2)
-        # # for idx in range(self.ratio**2-1):
-        # #     recon[:, (self.channels*self.y_dim**2+idx)::self.ratio**2-1] = patches[:, :, :, idx+1].view(vec.shape[0], self.channels * self.y_dim**2)
+    def Vt_DDIM_inv(self, vec):
         patches = vec.clone().reshape(vec.shape[0], self.channels, self.img_dim, self.img_dim)
         patches = patches.unfold(2, self.ratio, self.ratio).unfold(3, self.ratio, self.ratio)
         unfold_shape = patches.shape
@@ -614,7 +576,7 @@ class SuperResolution(A_functions):
     def singulars(self):
         return self.singulars_small.repeat(self.channels * self.y_dim**2)
 
-    def singulars_ours(self):
+    def singulars_DDIM_inv(self):
         sgl_vals = torch.zeros(self.channels * self.img_dim**2, device=self.singulars_small.device)
         sgl_vals[:self.channels * self.y_dim**2] = self.singulars_small.repeat(self.channels * self.y_dim**2)
         return sgl_vals
@@ -648,12 +610,7 @@ class SuperResolution(A_functions):
             lambda_t = lambda_t * (-change_index + 1.0) + change_index * (singulars * sigma_t * (1 - eta ** 2) ** 0.5 / a / sigma_y)
             
         lambda_t = lambda_t.reshape(1, 1, 1, -1)
-#         print("lambda_t:", lambda_t)
-#         print("V:", self.V_small)
-#         print(lambda_t.size(), self.V_small.size())
-#         print("Sigma_t:", torch.matmul(torch.matmul(self.V_small, torch.diag(lambda_t.reshape(-1))), self.Vt_small))
         patches = patches * lambda_t
-        
         
         patches = torch.matmul(self.V_small, patches.reshape(-1, self.ratio**2, 1))
         
@@ -1026,163 +983,6 @@ class SRConv(A_functions):
 
 #Deblurring
 class Deblurring(A_functions):
-    # def mat_by_img(self, M, v):
-    #     return torch.matmul(M, v.reshape(v.shape[0] * self.channels, self.img_dim,
-    #                     self.img_dim)).reshape(v.shape[0], self.channels, M.shape[0], self.img_dim)
-
-    # def img_by_mat(self, v, M):
-    #     return torch.matmul(v.reshape(v.shape[0] * self.channels, self.img_dim,
-    #                     self.img_dim), M).reshape(v.shape[0], self.channels, self.img_dim, M.shape[1])
-
-    # def __init__(self, kernel, channels, img_dim, device, ZERO = 3e-2):
-    #     self.img_dim = img_dim
-    #     self.channels = channels
-    #     #build 1D conv matrix
-    #     A_small = torch.zeros(img_dim, img_dim, device=device)
-    #     for i in range(img_dim):
-    #         for j in range(i - kernel.shape[0]//2, i + kernel.shape[0]//2):
-    #             if j < 0 or j >= img_dim: continue
-    #             A_small[i, j] = kernel[j - i + kernel.shape[0]//2]
-    #     #get the svd of the 1D conv
-    #     self.U_small, self.singulars_small, self.V_small = torch.svd(A_small, some=False)
-    #     #ZERO = 3e-2
-    #     self.singulars_small_orig = self.singulars_small.clone()
-    #     self.singulars_small[self.singulars_small < ZERO] = 0
-    #     #calculate the singular values of the big matrix
-    #     self._singulars_orig = torch.matmul(self.singulars_small_orig.reshape(img_dim, 1), self.singulars_small_orig.reshape(1, img_dim)).reshape(img_dim**2)
-    #     self._singulars = torch.matmul(self.singulars_small.reshape(img_dim, 1), self.singulars_small.reshape(1, img_dim)).reshape(img_dim**2)
-    #     #sort the big matrix singulars and save the permutation
-    #     self._singulars, self._perm = self._singulars.sort(descending=True) #, stable=True)
-    #     self._singulars_orig = self._singulars_orig[self._perm]
-
-    # def V(self, vec):
-    #     #invert the permutation
-    #     temp = torch.zeros(vec.shape[0], self.img_dim**2, self.channels, device=vec.device)
-    #     temp[:, self._perm, :] = vec.clone().reshape(vec.shape[0], self.img_dim**2, self.channels)
-    #     temp = temp.permute(0, 2, 1)
-    #     #multiply the image by V from the left and by V^T from the right
-    #     out = self.mat_by_img(self.V_small, temp)
-    #     out = self.img_by_mat(out, self.V_small.transpose(0, 1)).reshape(vec.shape[0], -1)
-    #     return out
-
-    # def Vt(self, vec):
-    #     #multiply the image by V^T from the left and by V from the right
-    #     temp = self.mat_by_img(self.V_small.transpose(0, 1), vec.clone())
-    #     temp = self.img_by_mat(temp, self.V_small).reshape(vec.shape[0], self.channels, -1)
-    #     #permute the entries according to the singular values
-    #     temp = temp[:, :, self._perm].permute(0, 2, 1)
-    #     return temp.reshape(vec.shape[0], -1)
-
-    # def U(self, vec):
-    #     #invert the permutation
-    #     temp = torch.zeros(vec.shape[0], self.img_dim**2, self.channels, device=vec.device)
-    #     temp[:, self._perm, :] = vec.clone().reshape(vec.shape[0], self.img_dim**2, self.channels)
-    #     temp = temp.permute(0, 2, 1)
-    #     #multiply the image by U from the left and by U^T from the right
-    #     out = self.mat_by_img(self.U_small, temp)
-    #     out = self.img_by_mat(out, self.U_small.transpose(0, 1)).reshape(vec.shape[0], -1)
-    #     return out
-
-    # def Ut(self, vec):
-    #     #multiply the image by U^T from the left and by U from the right
-    #     temp = self.mat_by_img(self.U_small.transpose(0, 1), vec.clone())
-    #     temp = self.img_by_mat(temp, self.U_small).reshape(vec.shape[0], self.channels, -1)
-    #     #permute the entries according to the singular values
-    #     temp = temp[:, :, self._perm].permute(0, 2, 1)
-    #     return temp.reshape(vec.shape[0], -1)
-
-    # def singulars(self):
-    #     return self._singulars.repeat(1, 3).reshape(-1)
-
-    # def add_zeros(self, vec):
-    #     return vec.clone().reshape(vec.shape[0], -1)
-    
-    # def A_pinv(self, vec):
-    #     temp = self.Ut(vec)
-    #     singulars = self._singulars.repeat(1, 3).reshape(-1)
-        
-    #     factors = 1. / singulars
-    #     factors[singulars == 0] = 0.
-        
-    #     temp[:, :singulars.shape[0]] = temp[:, :singulars.shape[0]] * factors
-    #     return self.V(self.add_zeros(temp))
-    
-    # def Lambda(self, vec, a, sigma_y, sigma_t, eta):
-    #     temp_vec = self.mat_by_img(self.V_small.transpose(0, 1), vec.clone())
-    #     temp_vec = self.img_by_mat(temp_vec, self.V_small).reshape(vec.shape[0], self.channels, -1)
-    #     temp_vec = temp_vec[:, :, self._perm].permute(0, 2, 1)
-
-    #     singulars = self._singulars_orig
-    #     lambda_t = torch.ones(self.img_dim ** 2, device=vec.device)
-    #     temp_singulars = torch.zeros(self.img_dim ** 2, device=vec.device)
-    #     temp_singulars[:singulars.size(0)] = singulars
-    #     singulars = temp_singulars
-    #     inverse_singulars = 1. / singulars
-    #     inverse_singulars[singulars == 0] = 0.
-
-    #     if a != 0 and sigma_y != 0:
-    #         change_index = (sigma_t < a * sigma_y * inverse_singulars) * 1.0
-    #         lambda_t = lambda_t * (-change_index + 1.0) + change_index * (
-    #                 singulars * sigma_t * (1 - eta ** 2) ** 0.5 / a / sigma_y)
-
-    #     lambda_t = lambda_t.reshape(1, -1, 1)
-    #     temp_vec = temp_vec * lambda_t
-
-    #     temp = torch.zeros(vec.shape[0], self.img_dim ** 2, self.channels, device=vec.device)
-    #     temp[:, self._perm, :] = temp_vec.clone().reshape(vec.shape[0], self.img_dim ** 2, self.channels)
-    #     temp = temp.permute(0, 2, 1)
-    #     out = self.mat_by_img(self.V_small, temp)
-    #     out = self.img_by_mat(out, self.V_small.transpose(0, 1)).reshape(vec.shape[0], -1)
-    #     return out
-
-    # def Lambda_noise(self, vec, a, sigma_y, sigma_t, eta, epsilon):
-    #     temp_vec = vec.clone().reshape(vec.shape[0], self.channels, -1)
-    #     temp_vec = temp_vec[:, :, self._perm].permute(0, 2, 1)
-
-    #     temp_eps = epsilon.clone().reshape(vec.shape[0], self.channels, -1)
-    #     temp_eps = temp_eps[:, :, self._perm].permute(0, 2, 1)
-
-    #     singulars = self._singulars_orig
-    #     d1_t = torch.ones(self.img_dim ** 2, device=vec.device) * sigma_t * eta
-    #     d2_t = torch.ones(self.img_dim ** 2, device=vec.device) * sigma_t * (1 - eta ** 2) ** 0.5
-
-    #     temp_singulars = torch.zeros(self.img_dim ** 2, device=vec.device)
-    #     temp_singulars[:singulars.size(0)] = singulars
-    #     singulars = temp_singulars
-    #     inverse_singulars = 1. / singulars
-    #     inverse_singulars[singulars == 0] = 0.
-
-    #     if a != 0 and sigma_y != 0:
-    #         change_index = (sigma_t < a * sigma_y * inverse_singulars) * 1.0
-    #         d1_t = d1_t * (-change_index + 1.0) + change_index * sigma_t * eta
-    #         d2_t = d2_t * (-change_index + 1.0)
-
-    #         change_index = (sigma_t > a * sigma_y * inverse_singulars) * 1.0
-    #         d1_t = d1_t * (-change_index + 1.0) + torch.sqrt(
-    #             change_index * (sigma_t ** 2 - a ** 2 * sigma_y ** 2 * inverse_singulars ** 2))
-    #         d2_t = d2_t * (-change_index + 1.0)
-
-    #         change_index = (singulars == 0) * 1.0
-    #         d1_t = d1_t * (-change_index + 1.0) + change_index * sigma_t * eta
-    #         d2_t = d2_t * (-change_index + 1.0) + change_index * sigma_t * (1 - eta ** 2) ** 0.5
-
-    #     d1_t = d1_t.reshape(1, -1, 1)
-    #     d2_t = d2_t.reshape(1, -1, 1)
-
-    #     temp_vec = temp_vec * d1_t
-    #     temp_eps = temp_eps * d2_t
-
-    #     temp_vec_new = torch.zeros(vec.shape[0], self.img_dim ** 2, self.channels, device=vec.device)
-    #     temp_vec_new[:, self._perm, :] = temp_vec
-    #     out_vec = self.mat_by_img(self.V_small, temp_vec_new.permute(0, 2, 1))
-    #     out_vec = self.img_by_mat(out_vec, self.V_small.transpose(0, 1)).reshape(vec.shape[0], -1)
-
-    #     temp_eps_new = torch.zeros(vec.shape[0], self.img_dim ** 2, self.channels, device=vec.device)
-    #     temp_eps_new[:, self._perm, :] = temp_eps
-    #     out_eps = self.mat_by_img(self.V_small, temp_eps_new.permute(0, 2, 1))
-    #     out_eps = self.img_by_mat(out_eps, self.V_small.transpose(0, 1)).reshape(vec.shape[0], -1)
-
-    #     return out_vec + out_eps
     def mat_by_img(self, M, v):
         return torch.matmul(M, v.reshape(v.shape[0] * self.channels, self.img_dim,
                         self.img_dim)).reshape(v.shape[0], self.channels, M.shape[0], self.img_dim)
@@ -1222,7 +1022,7 @@ class Deblurring(A_functions):
         out = self.img_by_mat(out, self.V_small.transpose(0, 1)).reshape(vec.shape[0], -1)
         return out
 
-    def V_ours(self, vec):
+    def V_DDIM_inv(self, vec):
         #invert the permutation
         temp = torch.zeros(vec.shape[0], self.img_dim**2, self.channels, device=vec.device)
         temp[:, self._perm, :] = vec.clone().reshape(vec.shape[0], self.img_dim**2, self.channels)
@@ -1240,7 +1040,7 @@ class Deblurring(A_functions):
         temp = temp[:, :, self._perm].permute(0, 2, 1)
         return temp.reshape(vec.shape[0], -1)
 
-    def Vt_ours(self, vec):
+    def Vt_DDIM_inv(self, vec):
         #multiply the image by V^T from the left and by V from the right
         temp = self.mat_by_img(self.V_small.transpose(0, 1), vec.clone())
         temp = self.img_by_mat(temp, self.V_small).reshape(vec.shape[0], self.channels, -1)
@@ -1269,7 +1069,7 @@ class Deblurring(A_functions):
     def singulars(self):
         return self._singulars.repeat(1, 3).reshape(-1)
 
-    def singulars_ours(self):
+    def singulars_DDIM_inv(self):
         return self._singulars.repeat(1, 3).reshape(-1)
 
     def add_zeros(self, vec):
@@ -1406,7 +1206,7 @@ class Deblurring2D(A_functions):
         out = self.img_by_mat(out, self.V_small2.transpose(0, 1)).reshape(vec.shape[0], -1)
         return out
 
-    def V_ours(self, vec):
+    def V_DDIM_inv(self, vec):
         #invert the permutation
         temp = torch.zeros(vec.shape[0], self.img_dim**2, self.channels, device=vec.device)
         temp[:, self._perm, :] = vec.clone().reshape(vec.shape[0], self.img_dim**2, self.channels)
@@ -1424,7 +1224,7 @@ class Deblurring2D(A_functions):
         temp = temp[:, :, self._perm].permute(0, 2, 1)
         return temp.reshape(vec.shape[0], -1)
 
-    def Vt_ours(self, vec):
+    def Vt_DDIM_inv(self, vec):
         #multiply the image by V^T from the left and by V from the right
         temp = self.mat_by_img(self.V_small1.transpose(0, 1), vec.clone())
         temp = self.img_by_mat(temp, self.V_small2).reshape(vec.shape[0], self.channels, -1)
@@ -1453,10 +1253,8 @@ class Deblurring2D(A_functions):
     def singulars(self):
         return self._singulars.repeat(1, 3).reshape(-1)
     
-    def singulars_ours(self):
+    def singulars_DDIM_inv(self):
         return self._singulars.repeat(1, 3).reshape(-1)
-        # return self._singulars[self.indx_nonzero].repeat(1, 3).reshape(-1)
-
-
+    
     def add_zeros(self, vec):
         return vec.clone().reshape(vec.shape[0], -1)
