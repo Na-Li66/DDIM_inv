@@ -89,8 +89,8 @@ def dict2namespace(config):
     return namespace
 
 def cal_metrics(path):
-    orig_path = os.path.join("./exp/image_samples", path, f"ref")
-    generated_path = os.path.join("./exp/image_samples", path, f"sample")
+    orig_path = os.path.join(path, f"ref")
+    generated_path = os.path.join(path, f"sample")
     N = len(os.listdir(generated_path))
     assert N == 1000
     SSIM_sum = 0
@@ -102,7 +102,7 @@ def cal_metrics(path):
         for k in tqdm.tqdm(range(N)):
             source_path = os.sep.join([orig_path, 'orig_{}.png'.format(k)])
             source_image = skimage.io.imread(source_path)/255.00
-            denoise_path = os.sep.join([generated_path, '{}_-1.png'.format(k)])
+            denoise_path = os.sep.join([generated_path, '{}_0.png'.format(k)])
             generated_image = skimage.io.imread(denoise_path)/255.0
             SSIM = ssim(source_image, generated_image, data_range=generated_image.max() - generated_image.min(), channel_axis=-1)
             SSIM_sum += SSIM
@@ -120,8 +120,8 @@ def cal_metrics(path):
 def main():
     args, config = parse_args_and_config()
     try:
-        runner = Diffusion(args, config)
-        runner.sample()
+        # runner = Diffusion(args, config)
+        # runner.sample()
         cal_metrics(args.image_folder)
     except Exception:
         logging.error(traceback.format_exc())
