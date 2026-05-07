@@ -122,6 +122,7 @@ def main():
     try:
         runner = Diffusion(args, config)
         runner.sample()
+        cal_metrics(args.image_folder)
     except Exception:
         logging.error(traceback.format_exc())
     return 0
